@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Steam & CS.RIN.RU App Lookup</title>
+    <!-- Prevents the 404 favicon.ico error -->
+    <link rel="icon" href="data:,">
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -118,20 +120,20 @@
             background-color: #d9534f;
         }
         .btn-rin-checking {
-            background-color: #e0a800; /* Amber for checking state */
+            background-color: #e0a800;
             cursor: wait;
         }
         .btn-rin-found {
-            background-color: #2ca05a !important; /* Green when found */
+            background-color: #2ca05a !important;
         }
         .btn-rin-nocrack {
-            background-color: #555555 !important; /* Grey for no crack */
+            background-color: #555555 !important;
             cursor: not-allowed;
             opacity: 0.6;
-            pointer-events: none; /* Disables click interactions */
+            pointer-events: none;
         }
         .btn-rin-error {
-            background-color: #9c27b0 !important; /* Purple for proxy block */
+            background-color: #9c27b0 !important;
             cursor: not-allowed;
             opacity: 0.8;
             pointer-events: none;
@@ -165,19 +167,33 @@
         }
     }
 
-    // CORS Proxy Fetch
-    // We route our request through an external server to attach 'Access-Control-Allow-Origin'
+    // Advanced CORS fetch with primary and fallback proxies
     async function fetchCORS(url) {
-        // api.allorigins.win acts as the middleman bypassing browser CORS
-        const proxyUrl = `https://api.allorigins.win/get?disableCache=true&url=${encodeURIComponent(url)}`;
-        const response = await fetch(proxyUrl);
+        const encodedUrl = encodeURIComponent(url);
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // List of proxies to try sequentially if one fails
+        const proxyUrls = [
+            `https://corsproxy.io/?${encodedUrl}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`
+        ];
+
+        let lastError;
+
+        for (const proxy of proxyUrls) {
+            try {
+                const response = await fetch(proxy);
+                if (!response.ok) throw new Error(`Proxy responded with status: ${response.status}`);
+                // Both corsproxy and codetabs return the raw string response
+                return await response.text();
+            } catch (error) {
+                console.warn(`Proxy failed (${proxy}):`, error.message);
+                lastError = error;
+                // Move to next proxy in the loop
+            }
         }
-        
-        const data = await response.json();
-        return data.contents; // AllOrigins returns the raw response inside the 'contents' property
+
+        // If both proxies fail, throw the final error
+        throw lastError;
     }
 
     async function searchGame() {
@@ -218,7 +234,7 @@
                 `;
                 resultsDiv.appendChild(gameCard);
 
-                // Run staggered background checks to not rate-limit the CORS proxy
+                // Run staggered background checks to not rate-limit the proxies
                 setTimeout(() => {
                     verifyOnRin(item.id, item.name);
                 }, index * 1500); 
@@ -226,7 +242,7 @@
 
         } catch (error) {
             console.error(error);
-            resultsDiv.innerHTML = '<div class="error">Failed to fetch data. The Proxy server may be temporarily down.</div>';
+            resultsDiv.innerHTML = '<div class="error">Failed to fetch data. The proxy servers may be temporarily overloaded.</div>';
         }
     }
 
@@ -280,6 +296,7 @@
             rinBtn.className = "btn-link btn-rin-error";
             rinBtn.removeAttribute("href");
             rinBtn.removeAttribute("target");
+            rinBtn.title = "Proxy servers could not reach CS.RIN.RU";
         }
     }
 
